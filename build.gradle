@@ -11,8 +11,26 @@ base {
 }
 
 repositories {
+	// Cloth Config 26.1.154 ist (Stand Juli 2026) noch NICHT auf shedaniel's
+	// eigenem Maven-Repo veroeffentlicht (bestaetigt in
+	// https://github.com/shedaniel/cloth-config/issues/346), sondern nur ueber
+	// Modrinths Maven-API abrufbar. Deshalb hier als exclusiveContent-Block.
+	exclusiveContent {
+		forRepository {
+			maven {
+				name = "Modrinth"
+				url = "https://api.modrinth.com/maven"
+			}
+		}
+		filter {
+			includeGroup "maven.modrinth"
+		}
+	}
+	// Fuer zukuenftige Versionen, sobald shedaniel sie dort veroeffentlicht.
 	maven { url = "https://maven.shedaniel.me/" } // Cloth Config
-	maven { url = "https://maven.terraformersmc.com/releases/" } // Mod Menu
+	// Korrekte URL laut offiziellem ModMenu-README (ohne "/releases/"):
+	// https://github.com/TerraformersMC/ModMenu
+	maven { url = "https://maven.terraformersmc.com/" } // Mod Menu
 }
 
 loom {
@@ -39,7 +57,11 @@ dependencies {
 	// fabric.mod.json). Bei der neuen "net.fabricmc.fabric-loom"-Variante
 	// fuer unobfuskierte Minecraft-Versionen gibt es keine modImplementation-
 	// Konfiguration mehr (kein Remapping noetig) - daher normales implementation.
-	implementation "me.shedaniel.cloth:cloth-config-fabric:${project.cloth_config_version}"
+	//
+	// Cloth Config 26.1.154+fabric ueber Modrinths Maven-API (Projekt-ID
+	// "9s6osm5g" = cloth-config, Versions-ID "GFM8zh9J" = 26.1.154+fabric).
+	// Quelle: https://modrinth.com/mod/cloth-config/version/26.1.154+fabric
+	implementation "maven.modrinth:9s6osm5g:GFM8zh9J"
 	implementation "com.terraformersmc:modmenu:${project.modmenu_version}"
 }
 
