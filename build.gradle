@@ -1,5 +1,5 @@
 plugins {
-	id 'fabric-loom' version "${fabric_loom_version}"
+	id 'net.fabricmc.fabric-loom' version "${loom_version}"
 	id 'maven-publish'
 }
 
@@ -27,14 +27,16 @@ loom {
 }
 
 dependencies {
+	// 26.1.2 ist eine unobfuskierte Minecraft-Version (offizielle Mojang-
+	// Namen direkt, kein Yarn/Intermediary mehr noetig). Deshalb wie im
+	// offiziellen FabricMC-Template "implementation" statt "modImplementation"
+	// fuer Minecraft/Loader/Fabric-API - kein "mappings"-Aufruf mehr noetig.
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
-	// WICHTIG: ab ca. 1.21.9/1.21.10 verwendet Fabric offizielle Mojang-
-	// Mappings statt Yarn. Falls Loom hier meckert, in der Fabric-Doku
-	// unter "Migrating Mappings" fuer 26.1.2 nachsehen.
-	mappings loom.officialMojangMappings()
-	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
-	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
+	// Cloth Config und Mod Menu sind eigenstaendige Mods (mit eigenem
+	// fabric.mod.json), deshalb bleiben sie bei modImplementation.
 	modImplementation "me.shedaniel.cloth:cloth-config-fabric:${project.cloth_config_version}"
 	modImplementation "com.terraformersmc:modmenu:${project.modmenu_version}"
 }
@@ -47,13 +49,13 @@ processResources {
 }
 
 tasks.withType(JavaCompile).configureEach {
-	it.options.release = 21
+	it.options.release = 25
 }
 
 java {
 	withSourcesJar()
-	sourceCompatibility = JavaVersion.VERSION_21
-	targetCompatibility = JavaVersion.VERSION_21
+	sourceCompatibility = JavaVersion.VERSION_25
+	targetCompatibility = JavaVersion.VERSION_25
 }
 
 jar {
