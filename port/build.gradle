@@ -1,0 +1,63 @@
+plugins {
+	id 'fabric-loom' version "${fabric_loom_version}"
+	id 'maven-publish'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+	archivesName = project.archives_base_name
+}
+
+repositories {
+	maven { url = "https://maven.shedaniel.me/" } // Cloth Config
+	maven { url = "https://maven.terraformersmc.com/releases/" } // Mod Menu
+}
+
+loom {
+	splitEnvironmentSourceSets()
+
+	mods {
+		"selected-block-highlighter" {
+			sourceSet sourceSets.main
+			sourceSet sourceSets.client
+		}
+	}
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	// WICHTIG: ab ca. 1.21.9/1.21.10 verwendet Fabric offizielle Mojang-
+	// Mappings statt Yarn. Falls Loom hier meckert, in der Fabric-Doku
+	// unter "Migrating Mappings" fuer 26.1.2 nachsehen.
+	mappings loom.officialMojangMappings()
+	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+
+	modImplementation "me.shedaniel.cloth:cloth-config-fabric:${project.cloth_config_version}"
+	modImplementation "com.terraformersmc:modmenu:${project.modmenu_version}"
+}
+
+processResources {
+	inputs.property "version", project.version
+	filesMatching("fabric.mod.json") {
+		expand "version": project.version
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 21
+}
+
+java {
+	withSourcesJar()
+	sourceCompatibility = JavaVersion.VERSION_21
+	targetCompatibility = JavaVersion.VERSION_21
+}
+
+jar {
+	from("LICENSE") {
+		rename { "${it}_${project.base.archivesName.get()}" }
+	}
+}

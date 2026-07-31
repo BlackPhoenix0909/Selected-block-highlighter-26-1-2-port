@@ -1,0 +1,12 @@
+{
+	"required": true,
+	"minVersion": "0.8",
+	"package": "cc.spea.selectedblockhighlighter.mixin",
+	"compatibilityLevel": "JAVA_21",
+	"client": [
+		"GameRendererCleanupMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	}
+}

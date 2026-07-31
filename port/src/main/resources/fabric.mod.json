@@ -1,0 +1,39 @@
+{
+	"schemaVersion": 1,
+	"id": "selected-block-highlighter",
+	"version": "${version}",
+	"name": "Selected Block Highlighter",
+	"description": "Highlights all blocks nearby that match the item in your hand. Toggleable with a keybind (default: H) and configurable through ModMenu. Ported to Minecraft 26.1.2.",
+	"authors": [
+		"spea",
+		"unofficial 26.1.2 port"
+	],
+	"contact": {},
+	"license": "CC0-1.0",
+	"icon": "assets/selected-block-highlighter/icon.png",
+	"environment": "client",
+	"entrypoints": {
+		"main": [
+			"cc.spea.selectedblockhighlighter.SelectedBlockHighlighter"
+		],
+		"client": [
+			"cc.spea.selectedblockhighlighter.SelectedBlockHighlighterClient"
+		],
+		"modmenu": [
+			"cc.spea.selectedblockhighlighter.integration.ModMenuIntegration"
+		]
+	},
+	"mixins": [
+		"selected-block-highlighter.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.17.3",
+		"minecraft": "~26.1",
+		"java": ">=21",
+		"fabric-api": "*",
+		"cloth-config": ">=26.1.0"
+	},
+	"suggests": {
+		"modmenu": ">=18.0.0"
+	}
+}
