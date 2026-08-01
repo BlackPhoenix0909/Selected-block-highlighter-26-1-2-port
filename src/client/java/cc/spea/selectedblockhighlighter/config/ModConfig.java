@@ -30,6 +30,7 @@ public class ModConfig {
     public float highlightBlue = 0.0f;
     public float highlightAlpha = 0.4f;
     public float lineWidth = 2.0f;
+    public boolean seeThroughBlocks = false;
 
     private static ModConfig instance;
 
@@ -101,6 +102,15 @@ public class ModConfig {
 
     public void setLineWidth(float width) {
         this.lineWidth = Math.max(0.5f, Math.min(10.0f, width));
+        this.save();
+    }
+
+    public boolean isSeeThroughBlocks() {
+        return this.seeThroughBlocks;
+    }
+
+    public void setSeeThroughBlocks(boolean seeThroughBlocks) {
+        this.seeThroughBlocks = seeThroughBlocks;
         this.save();
     }
 }
