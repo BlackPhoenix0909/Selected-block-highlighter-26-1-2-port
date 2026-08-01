@@ -5,7 +5,7 @@ import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.keybinding.v1.KeyMappingHelper;
+import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
@@ -43,8 +43,14 @@ public class KeyBindings {
                     ModConfig config = ModConfig.getInstance();
                     config.toggleEnabled();
                     if (client.player != null) {
+                        // Reine client-seitige Statusmeldung: direkt an die Chat-HUD
+                        // statt ueber LocalPlayer#displayClientMessage, dessen exakte
+                        // Signatur/Existenz fuer 26.1.2 nicht zweifelsfrei verifiziert
+                        // werden konnte (im letzten Build-Log als Fehler aufgetaucht).
+                        // Falls client.gui hier ebenfalls nicht passt: in IntelliJ auf
+                        // "client." tippen und nach "gui"/"getChat"/"Chat" suchen.
                         String status = config.isEnabled() ? "enabled" : "disabled";
-                        client.player.displayClientMessage(Component.literal("Block Highlighter " + status), true);
+                        client.gui.getChat().addMessage(Component.literal("Block Highlighter " + status));
                     }
                 }
             } else {

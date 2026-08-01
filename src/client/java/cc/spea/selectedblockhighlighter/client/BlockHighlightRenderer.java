@@ -1,131 +1,125 @@
 package cc.spea.selectedblockhighlighter.client;
 
 import cc.spea.selectedblockhighlighter.config.ModConfig;
-import com.mojang.blaze3d.buffers.GpuBuffer;
-import com.mojang.blaze3d.buffers.GpuBufferSlice;
-import com.mojang.blaze3d.pipeline.RenderPipeline;
-import com.mojang.blaze3d.systems.CommandEncoder;
-import com.mojang.blaze3d.systems.RenderPass;
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.BufferBuilder;
-import com.mojang.blaze3d.vertex.ByteBufferBuilder;
-import com.mojang.blaze3d.vertex.MeshData;
-import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexFormat;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelExtractionContext;
-import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.MappableRingBuffer;
-import net.minecraft.client.renderer.RenderPipelines;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.resources.Identifier;
+import net.minecraft.gizmos.Gizmo;
+import net.minecraft.gizmos.GizmoPrimitives;
+import net.minecraft.gizmos.Gizmos;
+import net.minecraft.util.ARGB;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
-import org.joml.Matrix4f;
-import org.joml.Matrix4fc;
-import org.joml.Vector3f;
-import org.joml.Vector4f;
-import org.lwjgl.system.MemoryUtil;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.OptionalDouble;
-import java.util.OptionalInt;
 
 /**
- * KOMPLETT NEU GESCHRIEBEN gegenueber der 1.20.1-Version.
+ * KOMPLETT NEU GESCHRIEBEN gegenueber der 1.20.1-Version (zweites Mal, siehe
+ * Chat-Verlauf) - diesmal auf Basis des neuen Gizmo-Systems.
  *
- * Grund: Zwischen 1.20.1 und 26.1.2 wurde die Welt-Rendering-Pipeline
- * mehrfach umgebaut (ab 1.21.6 "RenderType/RenderPipeline/RenderState"-
- * Umbau, ab 1.21.9 kurzzeitig entfernte und neu implementierte
- * WorldRenderEvents). Der alte Ansatz (Tesselator.getBuffer() +
- * RenderSystem.setShader() + manuelles GL-State-Toggling) existiert in
- * dieser Form nicht mehr.
+ * WICHTIGER ARCHITEKTURWECHSEL: Zwischen 1.21.10 und 1.21.11 hat Minecraft
+ * das komplette manuelle "Debug-artige" Welt-Rendering (RenderPipelines.DEBUG_*
+ * + eigene BufferBuilder/RenderPass-Verwaltung) durch ein neues, deutlich
+ * einfacheres Gizmo-System ersetzt (net.minecraft.gizmos). Ein Gizmo ist ein
+ * Objekt, das primitive Formen (Linien, Punkte, Quads, Text) "emittiert" und
+ * per Gizmos.addGizmo(...) eingereicht wird - Minecraft kuemmert sich danach
+ * selbststaendig um Buffer, Pipeline und Zeichnen. Quelle (verifiziert):
+ * NeoForged 1.21.10->1.21.11 Migration Primer, Abschnitt "Gizmos":
+ * https://docs.neoforged.net/primer/docs/1.21.11/
  *
- * Stattdessen: zweiphasiges Rendering (Extraction -> Drawing) mit
- * eigenen RenderPipeline-Objekten. Struktur 1:1 nach dem offiziellen,
- * versionsgenauen Beispiel fuer 26.1.2:
- * https://docs.fabricmc.net/26.1.2/develop/rendering/world
+ * Dadurch entfaellt die komplette vorherige Drawing-Phase (AFTER_TRANSLUCENT_TERRAIN
+ * + eigene RenderPipeline-Objekte + BufferBuilder + MappableRingBuffer) ersatzlos.
+ * Es bleibt nur noch die Extraction-Phase, die die Gizmos einreicht.
  *
- * UNSICHERHEIT (bitte im IDE mit Autovervollstaendigung pruefen, da ich
- * das hier nicht kompilieren konnte - siehe Chat-Erklaerung):
- *  - Der exakte Name der Basis-"Snippet"-Konstante fuer Linien in
- *    RenderPipelines (hier: RenderPipelines.DEBUG_LINE_STRIP als
- *    Vollpipeline, davon per builder() abgeleitet). Falls das nicht
- *    existiert: in IntelliJ "RenderPipelines." tippen und die Liste
- *    der DEBUG_*-Konstanten durchsehen.
- *  - Eine konfigurierbare Linienbreite (config.getLineWidth()) ist mit
- *    dem neuen Pipeline-System nicht mehr trivial moeglich; DEBUG_LINES
- *    ist laut Doku "always exactly one pixel wide on the screen". Die
- *    Linienbreite aus der Config wird aktuell NICHT mehr angewendet.
+ * UNSICHERHEIT (bitte im IDE mit Autovervollstaendigung/Javadoc gegenpruefen,
+ * da ich dies nicht kompilieren konnte):
+ *  - GizmoPrimitives#addLine(Vec3, Vec3, int argbColor, float lineWidth) ist
+ *    aus der offiziellen Fabric-Doku 1:1 belegt (siehe world.md, ExampleGizmo).
+ *  - Eine gefuellte (halbtransparente) Box zusaetzlich zum Umriss ist NICHT
+ *    mehr umgesetzt, da die genaue Signatur fuer Flaechen/Quads auf
+ *    GizmoPrimitives nicht zweifelsfrei verifiziert werden konnte. Der Umriss
+ *    (Linien) allein entspricht optisch der vanilla-typischen Block-Outline.
+ *    Falls eine gefuellte Flaeche gewuenscht ist: in IntelliJ auf
+ *    "GizmoPrimitives." tippen und nach einer add*Quad/addRect-Methode suchen.
+ *  - Konfigurierbare Linienbreite (config.getLineWidth()) wird ueber den
+ *    lineWidth-Parameter von addLine wieder unterstuetzt (im Unterschied zur
+ *    vorherigen RenderPipelines-Version, wo das nicht mehr moeglich war).
  */
 @Environment(EnvType.CLIENT)
 public class BlockHighlightRenderer {
 
-    private static final Identifier FILLED_PIPELINE_ID =
-            Identifier.fromNamespaceAndPath("selected-block-highlighter", "pipeline/highlight_filled_through_walls");
-    private static final Identifier LINE_PIPELINE_ID =
-            Identifier.fromNamespaceAndPath("selected-block-highlighter", "pipeline/highlight_lines_through_walls");
+    /** Eine einzelne Boxkontur, die als 12 Linien-Gizmos emittiert wird. */
+    private record BlockOutlineGizmo(double minX, double minY, double minZ,
+                                      double maxX, double maxY, double maxZ,
+                                      int argbColor, float lineWidth) implements Gizmo {
+        @Override
+        public void emit(GizmoPrimitives gizmos, float alphaMultiplier) {
+            int color = ARGB.multiplyAlpha(argbColor, alphaMultiplier);
 
-    private static final RenderPipeline FILLED_THROUGH_WALLS = RenderPipelines.register(
-            RenderPipeline.builder(RenderPipelines.DEBUG_FILLED_SNIPPET)
-                    .withLocation(FILLED_PIPELINE_ID)
-                    .withDepthStencilState(java.util.Optional.empty())
-                    .build()
-    );
+            Vec3 v000 = new Vec3(minX, minY, minZ);
+            Vec3 v001 = new Vec3(minX, minY, maxZ);
+            Vec3 v010 = new Vec3(minX, maxY, minZ);
+            Vec3 v011 = new Vec3(minX, maxY, maxZ);
+            Vec3 v100 = new Vec3(maxX, minY, minZ);
+            Vec3 v101 = new Vec3(maxX, minY, maxZ);
+            Vec3 v110 = new Vec3(maxX, maxY, minZ);
+            Vec3 v111 = new Vec3(maxX, maxY, maxZ);
 
-    // TODO: Basis-Snippet-Name pruefen, siehe Klassenkommentar oben.
-    private static final RenderPipeline LINES_THROUGH_WALLS = RenderPipelines.register(
-            RenderPipeline.builder(RenderPipelines.DEBUG_LINE_STRIP)
-                    .withLocation(LINE_PIPELINE_ID)
-                    .withDepthStencilState(java.util.Optional.empty())
-                    .build()
-    );
-
-    private static final ByteBufferBuilder ALLOCATOR = new ByteBufferBuilder(RenderType.SMALL_BUFFER_SIZE);
-    private static final Vector4f COLOR_MODULATOR = new Vector4f(1f, 1f, 1f, 1f);
-    private static final Vector3f MODEL_OFFSET = new Vector3f();
-    private static final Matrix4f TEXTURE_MATRIX = new Matrix4f();
-
-    private static BufferBuilder filledBuffer;
-    private static BufferBuilder lineBuffer;
-    private static MappableRingBuffer filledVertexBuffer;
-    private static MappableRingBuffer lineVertexBuffer;
-
-    /** Immutable Render-State, in der Extraction-Phase befuellt. */
-    private record BoxState(double minX, double minY, double minZ,
-                             double maxX, double maxY, double maxZ) {
+            // Untere 4 Kanten
+            gizmos.addLine(v000, v100, color, lineWidth);
+            gizmos.addLine(v100, v101, color, lineWidth);
+            gizmos.addLine(v101, v001, color, lineWidth);
+            gizmos.addLine(v001, v000, color, lineWidth);
+            // Obere 4 Kanten
+            gizmos.addLine(v010, v110, color, lineWidth);
+            gizmos.addLine(v110, v111, color, lineWidth);
+            gizmos.addLine(v111, v011, color, lineWidth);
+            gizmos.addLine(v011, v010, color, lineWidth);
+            // 4 senkrechte Kanten
+            gizmos.addLine(v000, v010, color, lineWidth);
+            gizmos.addLine(v100, v110, color, lineWidth);
+            gizmos.addLine(v101, v111, color, lineWidth);
+            gizmos.addLine(v001, v011, color, lineWidth);
+        }
     }
 
-    private static List<BoxState> extractedBoxes = List.of();
-
-    /** Extraction-Phase: darf Weltdaten lesen, aber noch nicht zeichnen. */
+    /**
+     * Extraction-Phase: Weltdaten lesen und direkt als Gizmos einreichen.
+     * Es gibt bewusst keine separate Drawing-Phase / render()-Methode mehr,
+     * das Gizmo-System uebernimmt das Zeichnen selbststaendig (siehe
+     * Klassenkommentar oben).
+     */
     public static void extract(LevelExtractionContext context) {
         ModConfig config = ModConfig.getInstance();
         if (!config.isEnabled()) {
-            extractedBoxes = List.of();
             return;
         }
 
         List<BlockPos> blocks = BlockScanner.getMatchingBlocks();
         if (blocks.isEmpty()) {
-            extractedBoxes = List.of();
             return;
         }
 
         Minecraft client = Minecraft.getInstance();
         if (client.level == null) {
-            extractedBoxes = List.of();
             return;
         }
 
-        List<BoxState> boxes = new ArrayList<>(blocks.size());
+        float[] color = config.getHighlightColor();
+        // Manuelles ARGB-Packing statt einer evtl. nicht existierenden
+        // ARGB-Hilfsmethode, um hier kein weiteres Rateelement einzubauen.
+        int a = Math.round(color[3] * 255f) & 0xFF;
+        int r = Math.round(color[0] * 255f) & 0xFF;
+        int g = Math.round(color[1] * 255f) & 0xFF;
+        int b = Math.round(color[2] * 255f) & 0xFF;
+        int argbColor = (a << 24) | (r << 16) | (g << 8) | b;
+        float lineWidth = config.getLineWidth();
+
         for (BlockPos pos : blocks) {
             BlockState state = client.level.getBlockState(pos);
             VoxelShape shape = state.getShape(client.level, pos);
@@ -145,161 +139,7 @@ public class BlockHighlightRenderer {
             double maxY = pos.getY() + shape.max(Direction.Axis.Y);
             double maxZ = pos.getZ() + shape.max(Direction.Axis.Z);
 
-            boxes.add(new BoxState(minX, minY, minZ, maxX, maxY, maxZ));
-        }
-        extractedBoxes = boxes;
-    }
-
-    /** Drawing-Phase: nur noch das extrahierte Render-State zeichnen. */
-    public static void render(LevelRenderContext context) {
-        if (extractedBoxes.isEmpty()) {
-            return;
-        }
-
-        ModConfig config = ModConfig.getInstance();
-        float[] color = config.getHighlightColor();
-
-        PoseStack matrices = context.poseStack();
-        Vec3 camera = context.levelState().cameraRenderState.pos;
-
-        matrices.pushPose();
-        matrices.translate(-camera.x, -camera.y, -camera.z);
-        Matrix4f positionMatrix = matrices.last().pose();
-
-        filledBuffer = new BufferBuilder(ALLOCATOR, FILLED_THROUGH_WALLS.getVertexFormatMode(), FILLED_THROUGH_WALLS.getVertexFormat());
-        lineBuffer = new BufferBuilder(ALLOCATOR, LINES_THROUGH_WALLS.getVertexFormatMode(), LINES_THROUGH_WALLS.getVertexFormat());
-
-        for (BoxState box : extractedBoxes) {
-            addFilledBox(positionMatrix, filledBuffer, box, color[0], color[1], color[2], color[3]);
-            addLineBox(positionMatrix, lineBuffer, box, color[0], color[1], color[2], 1.0f);
-        }
-
-        matrices.popPose();
-
-        Minecraft client = Minecraft.getInstance();
-        filledVertexBuffer = drawBuffer(client, FILLED_THROUGH_WALLS, filledBuffer, filledVertexBuffer);
-        lineVertexBuffer = drawBuffer(client, LINES_THROUGH_WALLS, lineBuffer, lineVertexBuffer);
-    }
-
-    private static void addFilledBox(Matrix4fc m, BufferBuilder buffer, BoxState b, float r, float g, float bl, float a) {
-        float minX = (float) b.minX(), minY = (float) b.minY(), minZ = (float) b.minZ();
-        float maxX = (float) b.maxX(), maxY = (float) b.maxY(), maxZ = (float) b.maxZ();
-
-        // Front
-        buffer.addVertex(m, minX, minY, maxZ).setColor(r, g, bl, a);
-        buffer.addVertex(m, maxX, minY, maxZ).setColor(r, g, bl, a);
-        buffer.addVertex(m, maxX, maxY, maxZ).setColor(r, g, bl, a);
-        buffer.addVertex(m, minX, maxY, maxZ).setColor(r, g, bl, a);
-        // Back
-        buffer.addVertex(m, maxX, minY, minZ).setColor(r, g, bl, a);
-        buffer.addVertex(m, minX, minY, minZ).setColor(r, g, bl, a);
-        buffer.addVertex(m, minX, maxY, minZ).setColor(r, g, bl, a);
-        buffer.addVertex(m, maxX, maxY, minZ).setColor(r, g, bl, a);
-        // Left
-        buffer.addVertex(m, minX, minY, minZ).setColor(r, g, bl, a);
-        buffer.addVertex(m, minX, minY, maxZ).setColor(r, g, bl, a);
-        buffer.addVertex(m, minX, maxY, maxZ).setColor(r, g, bl, a);
-        buffer.addVertex(m, minX, maxY, minZ).setColor(r, g, bl, a);
-        // Right
-        buffer.addVertex(m, maxX, minY, maxZ).setColor(r, g, bl, a);
-        buffer.addVertex(m, maxX, minY, minZ).setColor(r, g, bl, a);
-        buffer.addVertex(m, maxX, maxY, minZ).setColor(r, g, bl, a);
-        buffer.addVertex(m, maxX, maxY, maxZ).setColor(r, g, bl, a);
-        // Top
-        buffer.addVertex(m, minX, maxY, maxZ).setColor(r, g, bl, a);
-        buffer.addVertex(m, maxX, maxY, maxZ).setColor(r, g, bl, a);
-        buffer.addVertex(m, maxX, maxY, minZ).setColor(r, g, bl, a);
-        buffer.addVertex(m, minX, maxY, minZ).setColor(r, g, bl, a);
-        // Bottom
-        buffer.addVertex(m, minX, minY, minZ).setColor(r, g, bl, a);
-        buffer.addVertex(m, maxX, minY, minZ).setColor(r, g, bl, a);
-        buffer.addVertex(m, maxX, minY, maxZ).setColor(r, g, bl, a);
-        buffer.addVertex(m, minX, minY, maxZ).setColor(r, g, bl, a);
-    }
-
-    /** 12 Kanten als LINES-Paare (2 Vertices pro Kante). */
-    private static void addLineBox(Matrix4fc m, BufferBuilder buffer, BoxState b, float r, float g, float bl, float a) {
-        float minX = (float) b.minX(), minY = (float) b.minY(), minZ = (float) b.minZ();
-        float maxX = (float) b.maxX(), maxY = (float) b.maxY(), maxZ = (float) b.maxZ();
-
-        float[][] edges = {
-                {minX, minY, minZ, maxX, minY, minZ}, {maxX, minY, minZ, maxX, minY, maxZ},
-                {maxX, minY, maxZ, minX, minY, maxZ}, {minX, minY, maxZ, minX, minY, minZ},
-                {minX, maxY, minZ, maxX, maxY, minZ}, {maxX, maxY, minZ, maxX, maxY, maxZ},
-                {maxX, maxY, maxZ, minX, maxY, maxZ}, {minX, maxY, maxZ, minX, maxY, minZ},
-                {minX, minY, minZ, minX, maxY, minZ}, {maxX, minY, minZ, maxX, maxY, minZ},
-                {maxX, minY, maxZ, maxX, maxY, maxZ}, {minX, minY, maxZ, minX, maxY, maxZ},
-        };
-
-        for (float[] e : edges) {
-            buffer.addVertex(m, e[0], e[1], e[2]).setColor(r, g, bl, a);
-            buffer.addVertex(m, e[3], e[4], e[5]).setColor(r, g, bl, a);
-        }
-    }
-
-    private static MappableRingBuffer drawBuffer(Minecraft client, RenderPipeline pipeline, BufferBuilder buffer, MappableRingBuffer vertexBuffer) {
-        MeshData builtBuffer = buffer.buildOrThrow();
-        MeshData.DrawState drawParameters = builtBuffer.drawState();
-        VertexFormat format = drawParameters.format();
-
-        int vertexBufferSize = drawParameters.vertexCount() * format.getVertexSize();
-        if (vertexBuffer == null || vertexBuffer.size() < vertexBufferSize) {
-            if (vertexBuffer != null) {
-                vertexBuffer.close();
-            }
-            vertexBuffer = new MappableRingBuffer(() -> "selected-block-highlighter render pipeline",
-                    GpuBuffer.USAGE_VERTEX | GpuBuffer.USAGE_MAP_WRITE, vertexBufferSize);
-        }
-
-        CommandEncoder commandEncoder = RenderSystem.getDevice().createCommandEncoder();
-        try (GpuBuffer.MappedView mappedView = commandEncoder.mapBuffer(
-                vertexBuffer.currentBuffer().slice(0, builtBuffer.vertexBuffer().remaining()), false, true)) {
-            MemoryUtil.memCopy(builtBuffer.vertexBuffer(), mappedView.data());
-        }
-
-        GpuBuffer indices;
-        VertexFormat.IndexType indexType;
-        if (pipeline.getVertexFormatMode() == VertexFormat.Mode.QUADS) {
-            builtBuffer.sortQuads(ALLOCATOR, RenderSystem.getProjectionType().vertexSorting());
-            indices = pipeline.getVertexFormat().uploadImmediateIndexBuffer(builtBuffer.indexBuffer());
-            indexType = builtBuffer.drawState().indexType();
-        } else {
-            RenderSystem.AutoStorageIndexBuffer shapeIndexBuffer = RenderSystem.getSequentialBuffer(pipeline.getVertexFormatMode());
-            indices = shapeIndexBuffer.getBuffer(drawParameters.indexCount());
-            indexType = shapeIndexBuffer.type();
-        }
-
-        GpuBufferSlice dynamicTransforms = RenderSystem.getDynamicUniforms()
-                .writeTransform(RenderSystem.getModelViewMatrix(), COLOR_MODULATOR, MODEL_OFFSET, TEXTURE_MATRIX);
-
-        try (RenderPass renderPass = RenderSystem.getDevice()
-                .createCommandEncoder()
-                .createRenderPass(() -> "selected-block-highlighter rendering",
-                        client.getMainRenderTarget().getColorTextureView(), OptionalInt.empty(),
-                        client.getMainRenderTarget().getDepthTextureView(), OptionalDouble.empty())) {
-            renderPass.setPipeline(pipeline);
-            RenderSystem.bindDefaultUniforms(renderPass);
-            renderPass.setUniform("DynamicTransforms", dynamicTransforms);
-            renderPass.setVertexBuffer(0, vertexBuffer.currentBuffer());
-            renderPass.setIndexBuffer(indices, indexType);
-            renderPass.drawIndexed(0, 0, drawParameters.indexCount(), 1);
-        }
-
-        builtBuffer.close();
-        vertexBuffer.rotate();
-        return vertexBuffer;
-    }
-
-    /** Wird vom GameRendererCleanupMixin beim Schliessen des Spiels aufgerufen. */
-    public static void close() {
-        ALLOCATOR.close();
-        if (filledVertexBuffer != null) {
-            filledVertexBuffer.close();
-            filledVertexBuffer = null;
-        }
-        if (lineVertexBuffer != null) {
-            lineVertexBuffer.close();
-            lineVertexBuffer = null;
+            Gizmos.addGizmo(new BlockOutlineGizmo(minX, minY, minZ, maxX, maxY, maxZ, argbColor, lineWidth));
         }
     }
 }

@@ -8,7 +8,6 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.rendering.v1.level.LevelExtractionEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,11 +31,10 @@ public class SelectedBlockHighlighterClient implements ClientModInitializer {
         ModConfig.getInstance();
         KeyBindings.register();
 
-        // Extraction-Phase: Weltdaten lesen (BlockScanner) und in ein
-        // unveraenderliches Render-State-Objekt packen.
-        LevelExtractionEvents.END_EXTRACTION.register(BlockHighlightRenderer::extract);
-        // Drawing-Phase: nur noch das extrahierte Render-State zeichnen.
-        LevelRenderEvents.AFTER_TRANSLUCENT_TERRAIN.register(BlockHighlightRenderer::render);
+        // Extraction-Phase: Weltdaten lesen (BlockScanner) und direkt als
+        // Gizmos einreichen. Eine separate Drawing-Phase/render()-Methode
+        // gibt es nicht mehr - das Gizmo-System zeichnet selbststaendig.
+        LevelRenderEvents.END_EXTRACTION.register(BlockHighlightRenderer::extract);
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (client.level != null && client.player != null) {
