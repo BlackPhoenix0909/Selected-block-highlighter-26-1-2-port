@@ -70,6 +70,12 @@ public class ConfigScreen {
                 .setSaveConsumer(newValue -> config.lineWidth = newValue)
                 .build());
 
+        appearance.addEntry((AbstractConfigListEntry) entryBuilder.startBooleanToggle(Component.literal("See Through Blocks"), config.seeThroughBlocks)
+                .setDefaultValue(false)
+                .setTooltip(Component.literal("Show the outline even when hidden behind other blocks (X-ray style)"))
+                .setSaveConsumer(newValue -> config.seeThroughBlocks = newValue)
+                .build());
+
         return builder.build();
     }
 }
