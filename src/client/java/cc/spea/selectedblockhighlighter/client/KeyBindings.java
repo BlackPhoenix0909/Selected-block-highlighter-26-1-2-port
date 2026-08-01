@@ -6,12 +6,11 @@ import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
-import net.minecraft.client.GuiMessageSource;
 import net.minecraft.client.KeyMapping;
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.MessageSignature;
 import net.minecraft.resources.Identifier;
 import org.lwjgl.glfw.GLFW;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Portiert von der alten KeyBinding/KeyBindingHelper-API (1.20.1) auf die
@@ -23,6 +22,8 @@ import org.lwjgl.glfw.GLFW;
  */
 @Environment(EnvType.CLIENT)
 public class KeyBindings {
+    private static final Logger LOGGER = LoggerFactory.getLogger("selected-block-highlighter");
+
     private static final KeyMapping.Category CATEGORY = KeyMapping.Category.register(
             Identifier.fromNamespaceAndPath("selected-block-highlighter", "main")
     );
@@ -44,19 +45,18 @@ public class KeyBindings {
                     wasPressed = true;
                     ModConfig config = ModConfig.getInstance();
                     config.toggleEnabled();
+                    // ABSICHTLICH nur ins Log geschrieben, nicht als Chat-/HUD-Nachricht:
+                    // Fuer 26.1.2 (unobfuskiert) gibt es KEINE Mapping-Datenbank mehr, die
+                    // sich verifizieren liesse (siehe Chat-Erklaerung) - zwei Versuche mit
+                    // der Chat-HUD-API sind bereits an falsch geratenen Signaturen
+                    // gescheitert. Damit der Build sicher durchlaeuft, bleibt es vorerst
+                    // beim Logeintrag. Eine sichtbare Ingame-Meldung laesst sich danach
+                    // bequem per IDE-Autovervollstaendigung (gegen das echte, lokal von
+                    // Loom heruntergeladene 26.1.2-Jar) ergaenzen, z. B. ueber
+                    // "client.gui." tippen und die Overlay-/Chat-Methoden durchsehen.
                     if (client.player != null) {
-                        // Reine client-seitige Statusmeldung ueber die Chat-HUD.
-                        // Exakte Signatur direkt aus dem Compiler-Fehler des letzten
-                        // Build-Logs uebernommen: addMessage(Component, MessageSignature,
-                        // GuiMessageSource, GuiMessageTag). signature/tag sind fuer eine
-                        // rein lokale Systemmeldung nicht relevant -> null.
                         String status = config.isEnabled() ? "enabled" : "disabled";
-                        client.gui.getChat().addMessage(
-                                Component.literal("Block Highlighter " + status),
-                                (MessageSignature) null,
-                                GuiMessageSource.SYSTEM,
-                                null
-                        );
+                        LOGGER.info("Block Highlighter {}", status);
                     }
                 }
             } else {
