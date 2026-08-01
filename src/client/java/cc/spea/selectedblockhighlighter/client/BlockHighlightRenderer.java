@@ -139,7 +139,18 @@ public class BlockHighlightRenderer {
             double maxY = pos.getY() + shape.max(Direction.Axis.Y);
             double maxZ = pos.getZ() + shape.max(Direction.Axis.Z);
 
-            Gizmos.addGizmo(new BlockOutlineGizmo(minX, minY, minZ, maxX, maxY, maxZ, argbColor, lineWidth));
+            net.minecraft.gizmos.GizmoProperties properties = Gizmos.addGizmo(
+                    new BlockOutlineGizmo(minX, minY, minZ, maxX, maxY, maxZ, argbColor, lineWidth));
+
+            // setAlwaysOnTop() leert den Tiefenpuffer unmittelbar vor dem Zeichnen
+            // dieses Gizmos, wodurch der Umriss nicht mehr durch bereits gezeichnete
+            // Blockgeometrie verdeckt wird (Roentgen-/"see-through"-Effekt).
+            // Quelle (verifiziert): NeoForged 1.21.10->1.21.11 Migration Primer,
+            // Abschnitt "Gizmos" / GizmoProperties-Tabelle:
+            // https://docs.neoforged.net/primer/docs/1.21.11/
+            if (config.isSeeThroughBlocks()) {
+                properties.setAlwaysOnTop();
+            }
         }
     }
 }
